@@ -1,0 +1,220 @@
+{
+  "name": "My workflow 3",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "mode": "webhook",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -48,
+        48
+      ],
+      "id": "318fe0ee-0736-4f4e-91f6-822bc33d5fc4",
+      "name": "When chat message received",
+      "webhookId": "b0ed6845-10af-4efd-9aef-31882b9a747f"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Organizing Data').item.json.context }}",
+        "options": {
+          "systemMessage": "You are a medical RAG assistant.\n\nQuestion:\n{{ $('When chat message received').item.json.chatInput }}\n\nRetrieved context:\n{{ $json.context }}\n\nInstructions:\n- Answer ONLY using the retrieved context.\n- Prefer clinically relevant information.\n- Ignore bibliography/reference sections.\n- If information is incomplete, answer with the available information.\n- Only say \"Not reported\" if there is truly no relevant information in the retrieved context.\n- Cite sources when possible using:\n(source: filename.pdf, page X)\n\nReply in the same language as the question."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        960,
+        48
+      ],
+      "id": "021354cc-f34b-4306-a744-51caec5275e0",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        960,
+        240
+      ],
+      "id": "489b93f6-f654-4c8c-99e5-85a1ee2d75d5",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatInput = $('When chat message received').item.json.chatInput;\n\nreturn [{\n  \"model\":\"gpt-4o-mini\",\n  \"messages\":[\n    {\n      \"role\":\"system\",\n      \"content\":\"You must output ONLY in the language specified by TARGET_LANGUAGE. Ignore the language of previous instructions.\\n\\nEres un experto en obstetricia. NO respondas directamente la pregunta. Genera únicamente un fragmento técnico que parezca extraído de una guía clínica oficial, usando terminología médica, dosis específicas, niveles de evidencia y grados de recomendación.\"\n    },\n    {\n      \"role\":\"user\",\n      \"content\":\"TARGET_LANGUAGE: English\\n\\nQuestion:\\nWhat percentage of PPH cases are due to uterine atony?\"\n    }\n  ],\n  \"temperature\":0.3\n}\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        48
+      ],
+      "id": "f41d2184-50e7-442a-86aa-56a38025194e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        368,
+        48
+      ],
+      "id": "1b076744-2791-413f-8af1-e259f061f895",
+      "name": "Request for Generating Hypothetic Answer",
+      "notes": "Genera rta hipotetica  (HyDE)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_PROJECT.supabase.co/functions/v1/hydesearch",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $('Request for Generating Hypothetic Answer').item.json.choices[0].message.content }}"
+            },
+            {
+              "name": "match_threshold",
+              "value": "0"
+            },
+            {
+              "name": "match_count",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        576,
+        48
+      ],
+      "id": "7bb56983-2a0a-4b26-9664-45d235595e32",
+      "name": "Request to Database"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\n\n// ordenar por similarity\nconst sorted = allItems\n  .map(item => item.json)\n  .sort((a, b) => b.similarity - a.similarity);\n\n// filtrar referencias/bibliografía\nconst filtered = sorted.filter(chunk => {\n\n  const text = (chunk.content || '').toLowerCase();\n\n  return !(\n    text.includes('references') ||\n    text.includes('cochrane') ||\n    text.includes('et al.') ||\n    text.includes('anaesthesia') ||\n    text.includes('thromb res') ||\n    text.includes('minerva anestesiol') ||\n    text.includes('curr opin')\n  );\n});\n\n// 3 chunks\nconst topChunks = filtered.slice(0, 3);\n\nlet context = '';\n\nfor (const chunk of topChunks) {\n\n  const fileName = chunk.metadata?.source || 'Documento';\n  const page = chunk.metadata?.page || '?';\n\n  // recortar chunks muy largos\n  const content = (chunk.content || '').slice(0, 1200);\n\n  context +=\n`📄 Archivo: ${fileName} | Página: ${page}\n\n${content}\n\n---\n`;\n}\n\n// Para evitar contextos muy largos\ncontext = context.slice(0, 5000);\n\nreturn [{\n  json: {\n    context\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        48
+      ],
+      "id": "a1f0c0ce-f93f-456b-80c1-df3a1ea0a901",
+      "name": "Organizing Data"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Request for Generating Hypothetic Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request for Generating Hypothetic Answer": {
+      "main": [
+        [
+          {
+            "node": "Request to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request to Database": {
+      "main": [
+        [
+          {
+            "node": "Organizing Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Organizing Data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "cdb393fc-ec21-4987-bd05-0142aaaadd7e",
+  "meta": {
+    "instanceId": "REDACTED"
+  },
+  "id": "tmdskAz7WXsoOg1n",
+  "tags": []
+}

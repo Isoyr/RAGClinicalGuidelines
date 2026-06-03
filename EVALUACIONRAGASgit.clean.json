@@ -1,0 +1,1098 @@
+{
+  "name": "My workflow 3",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        304
+      ],
+      "id": "ea9260f5-d04b-471f-9921-e000553e00ac",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_DOC_ID",
+          "mode": "list",
+          "cachedResultName": "Preguntas_DoctorBot",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1760,
+        720
+      ],
+      "id": "155fbdc4-0b04-4a4d-9364-b6065810b50f",
+      "name": "Get row(s) in sheet2"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1968,
+        720
+      ],
+      "id": "319bc0a7-5e67-4d8b-a02b-ae3c07713558",
+      "name": "Loop Over Items2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_INSTANCE.app.n8n.cloud/webhook/2ff0b813-dcc5-4e07-821c-78621982794c/chat",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chatInput",
+              "value": "={{ $('Loop Over Items2').item.json.Preguntas }}"
+            },
+            {
+              "name": "sessionId",
+              "value": "=eval-{{ $itemIndex }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2800,
+        736
+      ],
+      "id": "be2d894a-0dd0-40e3-a029-e24d1c893386",
+      "name": "HTTP Request to Agent2",
+      "notes": "Este nodo va hacia el agente que se construyo, con RAG normal, a hacerle la pregunta."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{ $('Loop Over Items2').item.json.Preguntas }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3008,
+        736
+      ],
+      "id": "0244198b-5aa0-4f4e-a180-5d142f3b4393",
+      "name": "HTTP Request to embed2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const embeddingRaw = $input.item.json.data[0].embedding;\n\nconst embeddingArray = Array.isArray(embeddingRaw) \n  ? embeddingRaw \n  : embeddingRaw.split(',').map(Number);\n\nconst embeddingString = '[' + embeddingArray.join(',') + ']';\n\nreturn {\n  json: {\n    Preguntas: $('Loop Over Items2').item.json.Preguntas,\n    answer: $('HTTP Request to embed2').item.json.output,\n    embedding: embeddingString\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3232,
+        736
+      ],
+      "id": "a37ba8e9-0572-4040-baa9-d552375a3dc9",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Eres un evaluador estricto pero justo de sistemas RAG médicos.\nResponde SOLO con JSON válido. Sin texto adicional, sin bloques de código, sin backticks.\n\nPregunta: {{ $json.question }}\nContextos recuperados: {{ $json.contexts.slice(0,5).map(c => c.content).join('\\n---\\n') }}\nRespuesta del agente: {{ $json.answer }}\nRespuesta ideal: {{ $json.ground_truth }}\n\nRazona paso a paso antes de puntuar:\n\nPASO 1 - IDIOMA:\n¿La respuesta está en el mismo idioma que la pregunta?\n- Si NO → answer_relevancy máximo 0.4, anótalo.\n\nPASO 2 - FAITHFULNESS:\nLista cada afirmación principal de la respuesta.\nPara cada una: ¿está en los contextos, literal o claramente parafraseada?\n- RESPALDADA ✓: aparece literal o parafraseada en algún chunk\n- RESPALDADA ✓: es conclusión directa y obvia de los chunks\n- NO RESPALDADA ✗: requiere conocimiento externo no presente en ningún chunk\n- NO RESPALDADA ✗: cita fuentes que no aparecen en los metadatos de los chunks\nfaithfulness = respaldadas / total afirmaciones (decimal)\n\nPASO 3 - ANSWER RELEVANCY:\n¿La respuesta aborda exactamente lo que se pregunta?\n- ¿Hay contenido que contradice el enfoque de la pregunta?\n- ¿Hay información irrelevante que distrae?\n- Penaliza si la pregunta pide alternativas SIN X y la respuesta habla de X.\nanswer_relevancy = qué tan directamente responde la pregunta (0.0 a 1.0)\n\nPASO 4 - CONTEXT PRECISION:\nEvalúa chunk por chunk si es útil para responder ESTA pregunta específica.\nLista obligatoria:\n- Chunk 1: [útil/no útil] porque [razón]\n- Chunk 2: [útil/no útil] porque [razón]\n- Chunk 3: [útil/no útil] porque [razón]\n- Chunk 4: [útil/no útil] porque [razón]\n- Chunk 5: [útil/no útil] porque [razón]\ncontext_precision = chunks útiles / total chunks (decimal)\nNUNCA pongas 1.0 si algún chunk contiene información irrelevante para la pregunta.\n\nPASO 5 - CONTEXT RECALL:\nEl ground_truth puede ser texto libre con múltiples respuestas de médicos expertos.\n\nPrimero, lee TODO el ground_truth e identifica cada concepto \nclínico único mencionado. Cuenta todos aunque estén repetidos \nen diferentes respuestas de médicos — toma la lista ÚNICA.\n\nLuego verifica cada concepto contra los contextos recuperados.\n\nRecuerda: un ground_truth médico largo típicamente contiene \nentre 8 y 12 conceptos únicos. Si identificas menos de 6, \nprobablemente te estás perdiendo puntos — relee el ground_truth.\n\nFormato obligatorio:\n- [concepto identificado] → [chunk que lo cubre / \"ningún chunk\"] ✓/✗\n\ncontext_recall = puntos cubiertos / total identificados (decimal)\nNUNCA pongas más de 0.6 si el ground_truth menciona \nprocedimientos quirúrgicos o dispositivos (balón, compresas, \nB-Lynch, histerectomía) que no aparecen en los contextos.\n\nREGLAS PARA EL FLAG:\n- \"ok\" → faithfulness > 0.7 Y answer_relevancy > 0.7 Y idioma correcto\n- \"critico\" → cualquier métrica por debajo de 0.4\n- \"revisar\" → todos los demás casos\n\nREGLAS PARA LOS SCORES:\n- Usa decimales entre 0.0 y 1.0. NUNCA fracciones como 7/8.\n- Scores altos (> 0.85) solo con evidencia clara y fuerte.\n- No uses 0.0 por defecto si hay información suficiente para evaluar.\n- 1.0 solo si la evidencia es completa y sin excepciones.\n\nResponde ÚNICAMENTE con este JSON, sin bloques de código, sin texto antes ni después:\n{\n  \"faithfulness\": <decimal>,\n  \"answer_relevancy\": <decimal>,\n  \"context_precision\": <decimal>,\n  \"context_recall\": <decimal>,\n  \"flag\": \"<ok|revisar|critico>\",\n  \"nota\": \"<máximo 2 líneas explicando los puntos más bajos>\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        4176,
+        736
+      ],
+      "id": "2f2d080d-1bfe-4ead-b4d2-c381b54f3041",
+      "name": "Message a model5"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_DOC_ID",
+          "mode": "list",
+          "cachedResultName": "Evaluacion_AIAgent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "pregunta": "={{ $json.pregunta }}",
+            "answer": "={{ $json.answer }}",
+            "ground_truth": "={{ $json.ground_truth }}",
+            "faithfulness": "={{ $json.faithfulness }}",
+            "answer_relevancy": "={{ $json.answer_relevancy }}",
+            "context_precision": "={{ $json.context_precision }}",
+            "context_recall": "={{ $json.context_recall }}",
+            "ragas_score": "={{ $json.ragas_score }}",
+            "flag": "={{ $json.flag }}",
+            "nota": "={{ $json.nota }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "pregunta",
+              "displayName": "pregunta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answer",
+              "displayName": "answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ground_truth",
+              "displayName": "ground_truth",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "faithfulness",
+              "displayName": "faithfulness",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answer_relevancy",
+              "displayName": "answer_relevancy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "context_precision",
+              "displayName": "context_precision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "context_recall",
+              "displayName": "context_recall",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ragas_score",
+              "displayName": "ragas_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "flag",
+              "displayName": "flag",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nota",
+              "displayName": "nota",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4992,
+        736
+      ],
+      "id": "c67fc707-af36-4081-9407-e0f764512793",
+      "name": "Append row in sheet2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $input.item.json;\n\nconst gt = prev.ground_truth || \"\";\n\n// datos originales del loop\nconst base = $json;\n\nreturn {\n  json: {\n    question: base[\"Preguntas\"],\n    answer: \"\",\n    contexts: \"\",\n    ground_truth: gt\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2544,
+        736
+      ],
+      "id": "dcbaa542-6957-4869-932e-d67a1cbb9cea",
+      "name": "Code for Groundtruth2",
+      "notes": "extraer groundtruth"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_PROJECT.supabase.co/rest/v1/rpc/match_documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "REDACTED"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query_embedding\": \"{{ $json.embedding }}\",\n  \"match_count\": 5,\n  \"filter\": {}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3472,
+        736
+      ],
+      "id": "b38520c4-907d-4a06-98b3-1179fff2dfa5",
+      "name": "Request to Supabase1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pregunta = $('Loop Over Items2').item.json.Preguntas;\n\nconst ground_truth =\n  $('Code for Groundtruth2').item.json.ground_truth || '';\n\nlet answer = '';\n\ntry {\n  answer = $('HTTP Request to Agent2').item.json.output;\n} catch (e) {\n  answer = 'error obteniendo respuesta';\n}\n\n// contexts completos con metadata\nconst contexts = items\n  .map(item => ({\n    id: item.json.id,\n    content: item.json.content,\n    similarity: item.json.similarity,\n    metadata: {\n      source: item.json.metadata?.source,\n      page: item.json.metadata?.page,\n      line: item.json.metadata?.line,\n      lines: item.json.metadata?.loc?.lines\n    }\n  }))\n  .filter(c => c.content);\n\nreturn [{\n  json: {\n    question: pregunta,\n    answer,\n    contexts,\n    ground_truth\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3776,
+        736
+      ],
+      "id": "f2bef93e-c874-477c-bbfe-6b29f9420509",
+      "name": "Code PreguntaRespuesta2",
+      "notes": "Pregunta respuesta y contextos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r1 = $json[\"Respuestas Experto 1\"];\nconst r2 = $json[\"Respuestas Experto 2\"];\nconst r3 = $json[\"Respuestas Experto 3\"];\nconst r4 = $json[\"Respuestas Experto 4\"];\nconst r5 = $json[\"Respuestas Experto 5\"];\nconst r6 = $json[\"Respuestas Experto 6\"];\n\nreturn [{\n  json: {\n    ground_truth:\n      `${r1}\\n\\n${r2}\\n\\n${r3}\\n\\n${r4}\\n\\n${r5}\\n\\n${r6}`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2256,
+        736
+      ],
+      "id": "7c9d1432-4762-431a-a358-2980f9b2e895",
+      "name": "Code in JavaScript6"
+    },
+    {
+      "parameters": {
+        "content": "## Flujo de evaluación RAG normal, tomando como groundtruth las respuestas de los médicos.\n",
+        "height": 208,
+        "width": 272,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1264,
+        704
+      ],
+      "id": "7e90bd01-63a9-4505-8a1b-c7e81b1a0a19",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $input.item.json;\nlet scores;\n\ntry {\n  const raw = prev.output[0].content[0].text;\n  const clean = raw.replace(/```json|```/g, '').trim();\n  scores = JSON.parse(clean);\n} catch(e) {\n  scores = {\n    faithfulness: 0, answer_relevancy: 0,\n    context_precision: 0, context_recall: 0,\n    flag: 'error', nota: 'no se pudo parsear'\n  };\n}\n\nconst ragas_score = parseFloat((\n  (scores.faithfulness + scores.answer_relevancy +\n   scores.context_precision + scores.context_recall) / 4\n).toFixed(3));\n\nreturn {\n  json: {\n    pregunta: $('Loop Over Items2').item.json.Preguntas,\n    answer: $('Code PreguntaRespuesta2').item.json.answer,\n    ground_truth: $('Code for Groundtruth2').item.json.ground_truth,\n    faithfulness: scores.faithfulness,\n    answer_relevancy: scores.answer_relevancy,\n    context_precision: scores.context_precision,\n    context_recall: scores.context_recall,\n    ragas_score: ragas_score,\n    flag: scores.flag,\n    nota: scores.nota || ''\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4640,
+        736
+      ],
+      "id": "9dc50879-cd82-4dd4-930e-e6e4d5ea63b7",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_DOC_ID",
+          "mode": "list",
+          "cachedResultName": "Preguntas_DoctorBot",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1888,
+        304
+      ],
+      "id": "6b629559-303c-42fa-98d0-5062131d683e",
+      "name": "Get row(s) in sheet3"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2096,
+        304
+      ],
+      "id": "3c21cf8f-0584-4799-9cef-de89d037f571",
+      "name": "Loop Over Items3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_INSTANCE.app.n8n.cloud/webhook/b0ed6845-10af-4efd-9aef-31882b9a747f/chat",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chatInput",
+              "value": "={{ $('Loop Over Items3').item.json.Preguntas }}"
+            },
+            {
+              "name": "sessionId",
+              "value": "=eval-{{ $itemIndex }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2928,
+        320
+      ],
+      "id": "0e62f7ac-07ba-4a03-98bd-54056d8c55b0",
+      "name": "HTTP Request to Agent3",
+      "notes": "Este nodo va hacia el agente que se construyo, con RAG normal, a hacerle la pregunta."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{ $('Loop Over Items3').item.json.Preguntas }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3136,
+        320
+      ],
+      "id": "740d16fe-9774-4f4a-aa10-6dc0afbc5e7c",
+      "name": "HTTP Request to embed3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const embeddingRaw = $input.item.json.data[0].embedding;\n\nconst embeddingArray = Array.isArray(embeddingRaw) \n  ? embeddingRaw \n  : embeddingRaw.split(',').map(Number);\n\nconst embeddingString = '[' + embeddingArray.join(',') + ']';\n\nreturn {\n  json: {\n    Preguntas: $('Loop Over Items3').item.json.Preguntas,\n    answer: $('HTTP Request to embed3').item.json.output,\n    embedding: embeddingString\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        320
+      ],
+      "id": "81fad96e-0003-4271-ad40-0e7182d36c52",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Eres un evaluador estricto pero justo de sistemas RAG médicos.\nResponde SOLO con JSON válido. Sin texto adicional, sin bloques de código, sin backticks.\n\nPregunta: {{ $json.question }}\nContextos recuperados: {{ $json.contexts.slice(0,5).map(c => c.content).join('\\n---\\n') }}\nRespuesta del agente: {{ $json.answer }}\nRespuesta ideal: {{ $json.ground_truth }}\n\nRazona paso a paso antes de puntuar:\n\nPASO 1 - IDIOMA:\n¿La respuesta está en el mismo idioma que la pregunta?\n- Si NO → answer_relevancy máximo 0.4, anótalo.\n\nPASO 2 - FAITHFULNESS:\nLista cada afirmación principal de la respuesta.\nPara cada una: ¿está en los contextos, literal o claramente parafraseada?\n- RESPALDADA ✓: aparece literal o parafraseada en algún chunk\n- RESPALDADA ✓: es conclusión directa y obvia de los chunks\n- NO RESPALDADA ✗: requiere conocimiento externo no presente en ningún chunk\n- NO RESPALDADA ✗: cita fuentes que no aparecen en los metadatos de los chunks\nfaithfulness = respaldadas / total afirmaciones (decimal)\n\nPASO 3 - ANSWER RELEVANCY:\nPrimero reformula la pregunta en una frase corta con su intención core.\nLuego evalúa si la respuesta aborda ESA intención específica.\nSi la respuesta habla de un tema relacionado pero diferente → máximo 0.4.\nSi la respuesta incluye el elemento que la pregunta pide evitar \ncomo respuesta principal → máximo 0.3.\n¿La respuesta aborda exactamente lo que se pregunta?\n- ¿Hay contenido que contradice el enfoque de la pregunta?\n- ¿Hay información irrelevante que distrae?\n- Penaliza si la pregunta pide alternativas SIN X y la respuesta habla de X.\nanswer_relevancy = qué tan directamente responde la pregunta (0.0 a 1.0)\n\nPASO 4 - CONTEXT PRECISION:\nEvalúa chunk por chunk si es útil para responder ESTA pregunta específica.\nLista obligatoria:\n- Chunk 1: [útil/no útil] porque [razón]\n- Chunk 2: [útil/no útil] porque [razón]\n- Chunk 3: [útil/no útil] porque [razón]\n- Chunk 4: [útil/no útil] porque [razón]\n- Chunk 5: [útil/no útil] porque [razón]\ncontext_precision = chunks útiles / total chunks (decimal)\nNUNCA pongas 1.0 si algún chunk contiene información irrelevante para la pregunta.\n\nPASO 5 - CONTEXT RECALL:\nEl ground_truth puede ser texto libre con múltiples respuestas de médicos expertos.\n\nPrimero, lee TODO el ground_truth e identifica cada concepto \nclínico único mencionado. Cuenta todos aunque estén repetidos \nen diferentes respuestas de médicos — toma la lista ÚNICA.\n\nLuego verifica cada concepto contra los contextos recuperados.\n\nRecuerda: un ground_truth médico largo típicamente contiene \nentre 8 y 12 conceptos únicos. Si identificas menos de 6, \nprobablemente te estás perdiendo puntos — relee el ground_truth.\n\nFormato obligatorio:\n- [concepto identificado] → [chunk que lo cubre / \"ningún chunk\"] ✓/✗\n\ncontext_recall = puntos cubiertos / total identificados (decimal)\nNUNCA pongas más de 0.6 si el ground_truth menciona \nprocedimientos quirúrgicos o dispositivos (balón, compresas, \nB-Lynch, histerectomía) que no aparecen en los contextos.\n\nREGLAS PARA EL FLAG:\n- \"ok\" → faithfulness > 0.7 Y answer_relevancy > 0.7 Y idioma correcto\n- \"critico\" → cualquier métrica por debajo de 0.4\n- \"revisar\" → todos los demás casos\n\nREGLAS PARA LOS SCORES:\n- Usa decimales entre 0.0 y 1.0. NUNCA fracciones como 7/8.\n- Scores altos (> 0.85) solo con evidencia clara y fuerte.\n- No uses 0.0 por defecto si hay información suficiente para evaluar.\n- 1.0 solo si la evidencia es completa y sin excepciones.\n\nResponde ÚNICAMENTE con este JSON, sin bloques de código, sin texto antes ni después:\n{\n  \"faithfulness\": <decimal>,\n  \"answer_relevancy\": <decimal>,\n  \"context_precision\": <decimal>,\n  \"context_recall\": <decimal>,\n  \"flag\": \"<ok|revisar|critico>\",\n  \"nota\": \"<máximo 2 líneas explicando los puntos más bajos>\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        4304,
+        320
+      ],
+      "id": "a64e4d9b-5c74-40f6-b837-76aafb2b3a15",
+      "name": "Message a model6"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_DOC_ID",
+          "mode": "list",
+          "cachedResultName": "Evaluacion_AIAgent_HYDE",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "pregunta": "={{ $json.pregunta }}",
+            "answer": "={{ $json.answer }}",
+            "ground_truth": "={{ $json.ground_truth }}",
+            "faithfulness": "={{ $json.faithfulness }}",
+            "answer_relevancy": "={{ $json.answer_relevancy }}",
+            "context_precision": "={{ $json.context_precision }}",
+            "context_recall": "={{ $json.context_recall }}",
+            "ragas_score": "={{ $json.ragas_score }}",
+            "flag": "={{ $json.flag }}",
+            "nota": "={{ $json.nota }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "pregunta",
+              "displayName": "pregunta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answer",
+              "displayName": "answer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ground_truth",
+              "displayName": "ground_truth",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "faithfulness",
+              "displayName": "faithfulness",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answer_relevancy",
+              "displayName": "answer_relevancy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "context_precision",
+              "displayName": "context_precision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "context_recall",
+              "displayName": "context_recall",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ragas_score",
+              "displayName": "ragas_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "flag",
+              "displayName": "flag",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nota",
+              "displayName": "nota",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4976,
+        320
+      ],
+      "id": "53743572-3ddf-4331-b96f-77b1669d618b",
+      "name": "Append row in sheet3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $input.item.json;\n\nconst gt = prev.ground_truth || \"\";\n\n// datos originales del loop\nconst base = $json;\n\nreturn {\n  json: {\n    question: base[\"Preguntas\"],\n    answer: \"\",\n    contexts: \"\",\n    ground_truth: gt\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        320
+      ],
+      "id": "ded958fb-8ba5-42a8-89db-5f755cdf4117",
+      "name": "Code for Groundtruth3",
+      "notes": "extraer groundtruth"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_PROJECT.supabase.co/rest/v1/rpc/match_documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "REDACTED"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer REDACTED"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query_embedding\": \"{{ $json.embedding }}\",\n  \"match_count\": 5,\n  \"filter\": {}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3600,
+        320
+      ],
+      "id": "cf9099ee-ca80-41ab-aeee-b544672bdbfb",
+      "name": "Request to Supabase2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pregunta = $('Loop Over Items3').item.json.Preguntas;\n\nconst ground_truth =\n  $('Code for Groundtruth3').item.json.ground_truth || '';\n\nlet answer = '';\n\ntry {\n  answer = $('HTTP Request to Agent3').item.json.output;\n} catch (e) {\n  answer = 'error obteniendo respuesta';\n}\n\n// contexts completos con metadata\nconst contexts = items\n  .map(item => ({\n    id: item.json.id,\n    content: item.json.content,\n    similarity: item.json.similarity,\n    metadata: {\n      source: item.json.metadata?.source,\n      page: item.json.metadata?.page,\n      line: item.json.metadata?.line,\n      lines: item.json.metadata?.loc?.lines\n    }\n  }))\n  .filter(c => c.content);\n\nreturn [{\n  json: {\n    question: pregunta,\n    answer,\n    contexts,\n    ground_truth\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3904,
+        320
+      ],
+      "id": "e451b85c-4e72-4fd6-a7b6-d451953d0105",
+      "name": "Code PreguntaRespuesta3",
+      "notes": "Pregunta respuesta y contextos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r1 = $json[\"Respuestas Experto 1\"];\nconst r2 = $json[\"Respuestas Experto 2\"];\nconst r3 = $json[\"Respuestas Experto 3\"];\nconst r4 = $json[\"Respuestas Experto 4\"];\nconst r5 = $json[\"Respuestas Experto 5\"];\nconst r6 = $json[\"Respuestas Experto 6\"];\n\nreturn [{\n  json: {\n    ground_truth:\n      `${r1}\\n\\n${r2}\\n\\n${r3}\\n\\n${r4}\\n\\n${r5}\\n\\n${r6}`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2384,
+        320
+      ],
+      "id": "29adebe6-547f-4a3b-9278-eca0376ae439",
+      "name": "Code in JavaScript7"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $input.item.json;\nlet scores;\n\ntry {\n  const raw = prev.output[0].content[0].text;\n  const clean = raw.replace(/```json|```/g, '').trim();\n  scores = JSON.parse(clean);\n} catch(e) {\n  scores = {\n    faithfulness: 0, answer_relevancy: 0,\n    context_precision: 0, context_recall: 0,\n    flag: 'error', nota: 'no se pudo parsear'\n  };\n}\n\nconst ragas_score = parseFloat((\n  (scores.faithfulness + scores.answer_relevancy +\n   scores.context_precision + scores.context_recall) / 4\n).toFixed(3));\n\nreturn {\n  json: {\n    pregunta: $('Loop Over Items3').item.json.Preguntas,\n    answer: $('Code PreguntaRespuesta3').item.json.answer,\n    ground_truth: $('Code for Groundtruth3').item.json.ground_truth,\n    faithfulness: scores.faithfulness,\n    answer_relevancy: scores.answer_relevancy,\n    context_precision: scores.context_precision,\n    context_recall: scores.context_recall,\n    ragas_score: ragas_score,\n    flag: scores.flag,\n    nota: scores.nota || ''\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4768,
+        320
+      ],
+      "id": "9486f4ff-804d-4eb7-9e5e-44f0212cf3d7",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "content": "## Flujo de evaluación RAG con HYDE, tomando como groundtruth las respuestas de los médicos.\n",
+        "height": 208,
+        "width": 272,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1264,
+        304
+      ],
+      "id": "15b603e0-342d-4f34-a297-af58293a8df1",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Code in JavaScript6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request to Agent2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request to embed2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request to embed2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Request to Supabase1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model5": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code for Groundtruth2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request to Agent2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request to Supabase1": {
+      "main": [
+        [
+          {
+            "node": "Code PreguntaRespuesta2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code PreguntaRespuesta2": {
+      "main": [
+        [
+          {
+            "node": "Message a model5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript6": {
+      "main": [
+        [
+          {
+            "node": "Code for Groundtruth2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items3": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Code in JavaScript7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request to Agent3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request to embed3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request to embed3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Request to Supabase2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model6": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code for Groundtruth3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request to Agent3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request to Supabase2": {
+      "main": [
+        [
+          {
+            "node": "Code PreguntaRespuesta3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code PreguntaRespuesta3": {
+      "main": [
+        [
+          {
+            "node": "Message a model6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript7": {
+      "main": [
+        [
+          {
+            "node": "Code for Groundtruth3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "76eb8ea7-ffd7-4669-8979-ce555767c2c7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "REDACTED"
+  },
+  "id": "tmdskAz7WXsoOg1n",
+  "tags": []
+}
