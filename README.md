@@ -4,7 +4,7 @@
 
 A Retrieval-Augmented Generation (RAG) conversational agent that provides rapid, natural-language access to obstetric clinical practice guidelines. The system is built entirely on no-/low-code tooling (n8n) and compares two retrieval strategies — **standard RAG** and **HyDE-enhanced RAG** — evaluated with RAGAS-inspired metrics via an LLM-as-a-judge pipeline.
 
-This repository accompanies the paper *"RAG-Powered Clinical Conversational Agent for Real-Time Clinical Decision Support"* (ColCACI 2026), by Isabel Sofía Tovar Sánchez, Rubén Manrique, Nathalia Ortega, and Luis Felipe Giraldo — Universidad de los Andes & Instituto Roosevelt, Bogotá, Colombia.
+This repository accompanies the paper *"RAG-Powered Clinical Conversational Agent for Real-Time Clinical Decision Support"* , by Isabel Sofía Tovar Sánchez, Rubén Manrique, Nathalia Ortega, and Luis Felipe Giraldo — Universidad de los Andes & Instituto Roosevelt, Bogotá, Colombia.
 
 > **Note on credentials:** The workflow JSON files in this repo are **sanitized**. API keys are redacted, and project-specific identifiers (Supabase project ref, Google Drive folder ID, Google Docs/Sheets IDs, n8n instance subdomain) are replaced with placeholders such as `YOUR_PROJECT`, `YOUR_DRIVE_FOLDER_ID`, and `YOUR_GOOGLE_DOC_ID`. You must supply your own credentials and values before running them.
 
