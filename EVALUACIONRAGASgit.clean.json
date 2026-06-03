@@ -16,17 +16,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1-UtfPybEH4QKFQR3PHLq1MKWe0nbMbm4th7uEREGvd8",
+          "value": "YOUR_GOOGLE_DOC_ID",
           "mode": "list",
           "cachedResultName": "Preguntas_DoctorBot",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1-UtfPybEH4QKFQR3PHLq1MKWe0nbMbm4th7uEREGvd8/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
           "mode": "list",
           "cachedResultName": "Sheet1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1-UtfPybEH4QKFQR3PHLq1MKWe0nbMbm4th7uEREGvd8/edit#gid=0"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
         },
         "options": {}
       },
@@ -57,7 +57,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://i-tovars.app.n8n.cloud/webhook/2ff0b813-dcc5-4e07-821c-78621982794c/chat",
+        "url": "https://YOUR_N8N_INSTANCE.app.n8n.cloud/webhook/2ff0b813-dcc5-4e07-821c-78621982794c/chat",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -169,17 +169,17 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "1GJ-0L5X1vy2wDyvvNyFVgPJWjr5G69fD7DUxhTlMU_M",
+          "value": "YOUR_GOOGLE_DOC_ID",
           "mode": "list",
           "cachedResultName": "Evaluacion_AIAgent",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1GJ-0L5X1vy2wDyvvNyFVgPJWjr5G69fD7DUxhTlMU_M/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
           "mode": "list",
           "cachedResultName": "Sheet1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1GJ-0L5X1vy2wDyvvNyFVgPJWjr5G69fD7DUxhTlMU_M/edit#gid=0"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -411,17 +411,17 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "1-UtfPybEH4QKFQR3PHLq1MKWe0nbMbm4th7uEREGvd8",
+          "value": "YOUR_GOOGLE_DOC_ID",
           "mode": "list",
           "cachedResultName": "Preguntas_DoctorBot",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1-UtfPybEH4QKFQR3PHLq1MKWe0nbMbm4th7uEREGvd8/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
           "mode": "list",
           "cachedResultName": "Sheet1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1-UtfPybEH4QKFQR3PHLq1MKWe0nbMbm4th7uEREGvd8/edit#gid=0"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
         },
         "options": {}
       },
@@ -452,7 +452,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://i-tovars.app.n8n.cloud/webhook/b0ed6845-10af-4efd-9aef-31882b9a747f/chat",
+        "url": "https://YOUR_N8N_INSTANCE.app.n8n.cloud/webhook/b0ed6845-10af-4efd-9aef-31882b9a747f/chat",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -564,17 +564,17 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "1cGPLHcFjOJCu4tloFaNc2uchQFV5kH9iujqWX174eGY",
+          "value": "YOUR_GOOGLE_DOC_ID",
           "mode": "list",
           "cachedResultName": "Evaluacion_AIAgent_HYDE",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1cGPLHcFjOJCu4tloFaNc2uchQFV5kH9iujqWX174eGY/edit?usp=drivesdk"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
           "mode": "list",
           "cachedResultName": "Sheet1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1GJ-0L5X1vy2wDyvvNyFVgPJWjr5G69fD7DUxhTlMU_M/edit#gid=0"
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_DOC_ID/edit#gid=0"
         },
         "columns": {
           "mappingMode": "defineBelow",
